@@ -1,0 +1,1482 @@
+\documentclass[11pt,a4paper]{report}
+\usepackage[latin1]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[french]{babel}
+\usepackage{enumerate}
+\usepackage{program}
+\usepackage{graphicx}
+\usepackage{floatflt}
+\usepackage{a4}
+\usepackage{listings}
+
+
+\title{Représentation d'objets en 3 dimensions}
+\author{Franck Trey \& Florian Lefevre}
+\date{\today}
+
+
+\begin{document}
+
+\maketitle
+\tableofcontents
+
+\part{Description}
+
+\chapter{Principe de réprésentation}
+
+	Le but de ce projet est de représenté des objets en 3 dimensions. Pour cela nous disposons d'un ensemble de polygones disposé dans l'espace.
+	Nous devons donc projeter ces polygones sur l'écran en fonction de l'angle de vue.
+
+	Ici ne sont représenté que des éléments polygonales. Toute forme plus complexe tel que les courbes, les sphères, etc... sont dissociés en polygones.
+	
+	Les polygones s'afficheront en couleur si les informations sur la couleur sont données.
+
+\chapter{Base de travail}
+
+	Le programme peut créer des scènes d'objets ou de simples objets 3d à partir de 2 types de fichiers.
+
+	\section{Fichier OFF}
+
+		Un fichier OFF (Object File Format) est un fichier contenant un simple object 3d.
+		Chaque information peut séparé par un plusieurs espaces. Les commentaires dans le fichier sont marqués dans le fichier par le symbole \#
+		Il se compose en 3 principales parties.
+
+		\subsection{L'entête}
+
+			L'entête contient le code d'identification du type du fichier. "OFF" dans le cas présent.
+			S'ensuit trois nombres qui indiquent respectivement le nombres de sommets, le nombre de polygones ainsi que le nombre de bord dont se compose l'objet 3d.
+			Le nombre de bord doit obligatoirement être précisé même si ça valeur importe peu.
+
+			Par exemple :
+			\begin{verbatim}
+				OFF
+				8 6 12
+			\end{verbatim}
+
+			Cet exemple correspond à un fichier OFF contenant 8 vertices (sommets), 6 polygones et 12 bords.
+
+		\subsection{Liste des vertices}
+
+			La liste des vertices suit immédiatement après l'entête.
+			Chaque sommet est représenté par trois coordonnées représentant le point dans l'espace.
+			Chaque coordonnées correspond respectivement à l'abcisse ($x$), l'ordonnée ($y$) et la profondeur ($z$) du point dans l'espace.
+			Les coordonnées sont des nombres flottants.
+
+			Par exemple :
+			\begin{verbatim}
+				-1.632993   0.000000   1.154701
+			\end{verbatim}
+
+			Cet exemple correspond au point d'abcisse -1.632993, d'ordonnée 0 et de profondeur 1.154701.
+
+		\subsection{Liste des polygones}
+
+			De la même manière que la liste des vertices suit l'entête, la liste des polygones suit la liste des vertices.
+			Chaque polygone est représentés par plusieurs informations :
+			\begin{description}
+				\item[Nombre de vertices : ]Chaque ligne commence par le nombre de vertices dont se compose le polygone.
+				\item[Indices des sommets : ]Chaque vertices est résenté ici par son index. Si il y a N vertices, les valeurs possibles de ces index se trouve sur la plage $0$ ... $N-1$.
+				\item[Information sur la couleur : ] Les informations sur la couleur sont optionnels, elles peuvent ne pas être indiqué.
+				Toutefois si elles le sont, elles suivent le modèle RGBA (Rouge, Vert, Bleu, Alpha). Il existe dans ce cas deux modèles possibles :
+				\begin{itemize}
+					\item Chaque composante prend une valeur entre 0 et 255 et est donc représenté par un entier.
+					\item Chaque composante prend une valeur entre 0 et 1 et est donc représenté par un flottant.
+				\end{itemize}
+			\end{description}
+
+			Par exemple :
+			\begin{verbatim}
+				4  17   5   9   4   1.0   0.0   0.0   1.0
+			\end{verbatim}
+
+			Cet exemple représente un polygone a 4 faces composé des points 17, 5, 9 e t4 de la liste des vertices. Ce polygone est visible à 100\% et est exclusivement composé de rouge.
+
+	\section{Fichier SFF}
+
+		Les fichiers SFF (Scene File Format) ne sont pas standard et ont été créer ici pour représenter des scènes d'objets 3d, c'est à dire des scènes qui peuvent contenir plusieurs objets 3d.
+		De même que pour les fichiers OFF, les commentaires sont marqués par un \#.
+		Un fichier SFF se compose en deux parties :
+
+		\subsection{L'entête}
+
+			L'entête contient essentiellement deux informations.
+			Il s'agit tout d'abord du mot-clé "SFF" qu idique que l'on a affaire à un fichier du type SFF.
+			S'ensuit ensuite le nombre d'objet 3d contenu dans la scène.
+
+			Par exemple :
+			\begin{verbatim}
+				SFF
+				7
+			\end{verbatim}
+
+			Cet exemple représente l'entête d'un fichier contenant une scène 3d composé de 7 objets 3d.
+
+		\subsection{Liste des objets 3d}
+
+			Cette liste contient les chemins vers les fichiers OFF associés aux objets 3d. Ces chemins sont relatifs et sont situés par rapport au fichier SFF.
+			S'ensuit également les coordonnées du centre des objets 3d dans l'espace de la scène d'objets 3d.
+
+			Par exemple :
+			\begin{verbatim}
+				../off_file/cube.off 0.000000  -13.63299  -21.15470
+			\end{verbatim}
+
+			Cet exemple illustre la représentation d'un objet 3d contenu dans le fichier OFF cube.off. Cet objet se situant aux coordonnées 0.000000  -13.63299  -21.15470.
+
+	\section{Les repères}
+
+		Dans le programme ainsi que dans le reste de ce document, nous aurons besoin d'utiliser plusieurs repères différents afin de pouvoir projeter les poygones contenus dans le fichier à l'écran.
+		\begin{description}
+			\item[Repère $R_0$ :] Il s'agit du repère de base du fichier SFF. C'est à dire le repère de la scène d'objet 3d.
+			\item[Repère $R_1$ :] Le repère $R_1$ est le repère de base des fichiers OFF. C'est le repère propre de chaque objet 3d.
+			\item[Repère $R_2$ :] Le repère $R_2$ est propre à chaque objet 3d et son origine correspond au barycentre de l'objet 3d.
+			\item[Repère $R_3$ :] Il s'agit ici du repère de la vue 3d, c'est ce repère qui indique l'angle de vue avec lequel il faut projeter l'objet 3d. Il s'agit en effet de la transformation du repère sphérique $S_1$ en repère cartésien.
+			\item[Repère $R_4$ :] Le repère $R_4$ n'est autre que le repère projeté de $R_3$ sur l'écran. Il s'agit donc d'un repère composé de deux axes pour deux dimensions. Il nous sert ici à avoir la notion de distance de l'objet.
+			\item[Repère $R_5$ :] Il s'agit du repère qui est utilisé par le module QT pour l'affichage. Le point d'origine correspond à l'angle supérieur droit de l'écran.
+		\end{description}
+		\begin{description}
+			\item[Repère $S_0$ :] Le repère $S_0$ n'est autre que le repère de la scène 3d en coordonnées sphériques. Il est donc confondus avec le repère cartésien $R_0$.
+			\item[Repère $S_1$ :] Le repère $S_1$ correspond au repère cartésien $R_3$. Il a subit une rotation d'angle $\theta$ et $\phi$ par rapport au repère $S_0$ mais à même origine que ce dernier. Il nous permet donc ici de mettre en valeur la rotation de l'objet 3d dans l'espace.
+		\end{description}
+
+\chapter{Projections mathématiques}
+
+	Nous distinguerons 2 grandes catégories. Tout d'abord les projections qui seront faites une seule fois à la création de l'objet 3d. Ensuite nous verrons les projections qui seront faites à chaque mise à jour de l'écran.
+	Pour alléger les formules, nous ne projetons ici qu'un point $A$ qui a pour coordonnées $(x_1, y_1, z_1)$ dans le repère $R_1$.
+	Ce point $A$ est un point quelconque du polygone composé de n+1 points de $A_0$ à $A_n$.
+
+	Un polygone étant un ensemble de point, le projection qui s'applique au point $A$ et la même que celle qui s'applique aux polygones.
+
+	\section{Création de l'objet 3d}
+
+		Lors de la création de l'objet 3d, nous disposons, dans notre fichier OFF, d'un repère ($R_1$). L'objectif est de créer un nouveau repère $R_2$ spécifique à l'objet 3d.
+		Puis d'exprimer les coordonnées du point $A$ dans le repère $R_0$ de la scène 3d.
+		Pour cela nous avons choisit le centre de l'objet comme origine du nouveau repère $R_2$.
+		
+		\newpage
+		
+		\begin{figure}[ht]
+			\begin{center}
+				\includegraphics[width=8cm]{images/schema_reperes.jpg}
+			\end{center}
+			\caption{Point $A$ dans $R_0$, $R_1$ et $R_2$}
+		\end{figure}
+		
+		\subsection{Préliminaires}
+		
+			A la lecture des fichiers OFF ou SFF, nous disposons des informations suivantes :
+			\begin{itemize}
+				\item coordonnées du point $A$ dans $R_1$ : $(x_{A_1}, y_{A_1}, z_{A_1})$ ;
+				\item coordonnées du centre $G$ de l'objet dans $R_0$ : $(x_{G_0}, y_{G_0}, z_{G_0})$ ;
+			\end{itemize}
+		
+		\subsection{Calcul de l'origine de $R_2$}
+		
+			Ce repère ($R_2$) a donc comme origine le barycentre $G$ de l'objet 3d et ses axes ont même direction que ceux du repère $R_1$.
+
+			Soit $G$ un unique point de coordonnées $(R_1, x_{g_1}, y_{g_1}, z_{g_1})$ tel que :
+			\begin{displaymath}
+				\sum_{i=0}^{n} a_i\overrightarrow{A_{i}G}
+			\end{displaymath}
+			
+			$G$ est l'isobarycentre de l'ensemble des $n$ points $A_1$...$A_n$. C'est à dire que tout les points $A_1$...$A_n$ ont le même poid.
+			$G$ a donc pour coordonnées dans $R_1$ :
+			\begin{displaymath}
+				\left\{
+				\begin{array}{lll}
+					x_{g_1} = \frac{\sum_{i=1}^n{x_{A_i}}}{n}\\
+					y_{g_1} = \frac{\sum_{i=1}^n{y_{A_i}}}{n}\\
+					z_{g_1} = \frac{\sum_{i=1}^n{z_{A_i}}}{n}
+				\end{array}
+				\right.
+			\end{displaymath}
+			
+		\subsection{Coordonnées de $A$ dans le repère $R_2$}
+
+			Le point $A$ suit donc une translation suivant le vecteur $\overrightarrow{O_{1}G}$ :
+			\begin{displaymath}
+				\left\{
+				\begin{array}{lll}
+					x_2 = x_1 + x_{g_1}\\
+					y_2 = y_1 + y_{g_1}\\
+					z_2 = z_1 + z_{g_1}
+				\end{array}
+				\right.
+			\end{displaymath}
+
+			Le point $A$ a donc pour coordonnées dans le repère $R_2$ : $(x_2, y_2, z_2)$
+			
+		\subsection{Coordonnées de $A$ dans le repère $R_0$}
+		
+			Avant de projeter le point $A$ sur l'écran, nous devons calculer ces coordonnées dans le repère $R_0$ qui est le repère de la scène 3d.
+			Nous distinguons deux cas :
+			\begin{itemize}
+				\item la scène 3d est composé de plusieurs objets 3d ;
+				\item la scène 3d est composé d'un unique objet 3d ;
+			\end{itemize}
+			
+			\subsubsection{Unique objet 3d}
+			
+				Si la scène contient un unique objet 3d, nous prenons le centre de l'objet 3d $G$ dans le repère $R_2$ comme point d'orgine $O_0$ du repère $R_0$.
+				Dans ce cas, les coordonnées du point $A$ dans $R_0$ sont les même que celle dans le repère $R_2$ puisque les deux repères sont confondus.
+				Et le point $G$ prend donc pour coordonnées dans $R_0$ : $(0, 0, 0)$.
+				
+			\subsubsection{Ensemble d'objets 3d}
+			
+				Si la scène comporte plusieurs objets 3d, nous disposons alors, lors du chargement du fichier de scène SFF d'une information supplémentaire sur l'objet.
+				Il s'agit des coordonnées de son centre $G$ : $(x_{G_0}, y_{G_0}, z_{G_0})$ dans le repère de scène $R_0$.
+				Il suffit alors de faire une simple translation suivant le vecteur $\overrightarrow{O_{2}O_{0}}$ pour trouver les coordonnées du point $A$ dans $R_0$.
+				Soit A ayant pour coordonnées $(x_2, y_2, z_2)$ dans $R_2$ et $(x_0, y_0, z_0)$ dans $R_0$
+				\begin{displaymath}
+					\left\{
+					\begin{array}{lll}
+						x_0 = x_2 + x_{G_0}\\
+						y_0 = y_2 + y_{G_0}\\
+						z_0 = z_2 + z_{G_0}
+					\end{array}
+					\right.
+				\end{displaymath}
+			
+		\subsection{Résumé des calculs}
+		
+			\begin{eqnarray}
+				\nonumber A &:& \left\{
+				\begin{array}{lll}
+					x_0 = x_2 + x_{G_0}\\
+					y_0 = y_2 + y_{G_0}\\
+					z_0 = z_2 + z_{G_0}
+				\end{array}
+				\right.\\
+				\nonumber &\Leftrightarrow & \left\{
+				\begin{array}{lll}
+					x_0 = x_1 + x_{g_1} + x_{G_0}\\
+					y_0 = y_1 + y_{g_1} + y_{G_0}\\
+					z_0 = z_1 + z_{g_1} + z_{G_0}
+				\end{array}
+				\right.
+			\end{eqnarray}
+		
+		
+		\subsection{Conclusion}
+		
+			Nous disposons donc ici des coordonnées $(x_{A_0}, y_{A_0}, z_{A_0})$ du point $A$ dans le repère $R_0$. Ce sont ces coordonnées qui seront stocké dans le programme afin d'être projeter à l'écran.
+			
+
+	\section{Projection à l'écran}
+
+		Les calculs pour la projection des points à l'écran se fait en temps réels.
+		Notre objectif est ici de calculer les coordonnées du point $A$ dans le repère $R_5$ afin qu'il puisse être afficher à l'écran.
+		Pour ce faire, nous allons calculer les coordonnées de ce point dans
+		\begin{description}
+			\item[le repère $S_0$ :] Ce repère correspond à la transformation du repère cartésien $R_0$ en repère sphérique.
+			\item[le repère $S_1$ :] Ce repère a la même origine que le repère $S_0$ mais dont les axes sont orientés différement.  Ce qui nous permet de controler aisément l'angle de vue sur l'objet à partir d'un simple point de référence (l'origine de la vue $V$).
+			\item[le repère $R_3$ :] Ce repère correspond à la transformation du repère sphérique $S_1$ en repère cartésien.
+			\item[le repère $R_4$ :] Ce repère correspond à la projection du point $A$ sur l'écran. Il nous permet de gérer la notion de distance de l'objet par rapport à l'origine de la vue qui se trouve au centre de l'écran.
+			\item[le repère $R_5$ :] Ce repère est le système de coordonnées utilisé par QT et nous permet donc d'afficher le point $A$ directement à l'écran.
+		\end{description}
+		
+		\paragraph*{Remarque :}
+		
+			Nous partons ici des coordonnées du point $A$ dans un repère cartésien car il s'agit du moyen le plus simple pour représenter tout les points à n'importe quel moment des calculs.
+			Nous passons ensuite temporairement dans un repère sphérique pour revenir dans un repère cartésien. Ce changement de base de repère nous permet de calculer simplement la rotation en fonction des coordonnées du point $V$ dans le repère sphérique $S_0$.
+		
+		\subsection{Préliminaires}
+		
+			Nous avons comme base de départ :
+			\begin{itemize}
+				\item coordonnées de $A$ dans $R_0$ : $(x_{A_0}, y_{A_0}, z_{A_0})$ ;
+				\item coordonnées sphériques de $V$ dans $S_0$ : $(r_{V_0}, \theta_{V_0}, \phi_{V_0})$ ;
+			\end{itemize}
+			
+			Nous cherchons donc à calculer les coordonnées du point $A$ dans le repère $R_5$ en fonction de ses deux paramêtres.
+			
+		\subsection{Calcul de $A$ dans le repère sphérique $S_0$}
+		
+			Nous avons ici un simple changement de repère, du repère cartésien $R_0$ au repère sphérique $S_0$. Nous cherchons donc à calculer les coordonnées $(r_{A_0}, \theta_{A_0}, \phi_{A_0})$ du point $A$ dans le repère $S_0$.
+			
+			\begin{displaymath}
+				\left\{
+				\begin{array}{lll}
+					r_{A_0} = \sqrt{x_{A_0}^2 + y_{A_0}^2 + z_{A_0}^2}\\
+					\theta_{A_0} = \arccos\left(\frac{y_{A_0}}{r_{A_0}}\right)\\
+					\phi_{A_0} = \arcsin\left(\frac{x_{A_0}}{ \sqrt{x_{A_0}^2 + z_{A_0}^2} }\right)
+				\end{array}
+				\right.
+			\end{displaymath}
+				
+		\subsection{Calcul de $A$ dans le repère sphérique $S_1$}
+		
+			Le repère $S_1$ nous permet de mettre en évidence la rotation du point autour du centre de la scène. Il s'agit ici d'exprimer le point $A$ de coordonnées $(r_{A_0}, \theta_{A_0}, \phi_{A_0})$ dans le repère $S_0$ dans le repère $S_1$.
+			Le point $A$ prendra donc comme nouvelle coordonnées : $(r_{A_1}, \theta_{A_1}, \phi_{A_1})$.
+			Pour calculer les nouvelles coordonnées de $A$ dans le repère $S_1$, nous allons utiliser le point $V$ afin qu'il nous donne les angles $\theta$ et $\phi$, moteurs de la rotation.
+			
+			\begin{displaymath}
+				\left\{
+				\begin{array}{lll}
+					r_{A_1} = r_{A_0}\\
+					\theta_{A_1} = \theta_{A_0} - \theta_{V_0}\\
+					\phi_{A_1} = \phi_{A_0} - \phi_{V_0}
+				\end{array}
+				\right.
+			\end{displaymath}
+			
+		\subsection{Calcul de $A$ dans le repère $R_3$}
+		
+			Nous allons donc ici calculer les coordonées du point $A$ dans le repère $R_3$ qui possède même origine que le repère de la scène $R_0$ mais dont les axes sont orientés différement.
+			En effet, l'axe $(O_{z_3})$ correspond au vecteur $\overrightarrow{O_{0}V}$, le point $V$ étant l'origine de la vue de coordonnées $(R_0, x_{v_0}, y_{v_0}, z_{v_0})$.
+			Le repère $R_3$ étant la transformation cartésienne du repère sphérique $S_1$.
+
+			\begin{displaymath}
+				\left\{
+				\begin{array}{lll}
+					x_{A_3} = r_{A_1}\sin(\theta_{A_1})\sin(\phi_{A_1})\\
+					y_{A_3} = r_{A_1}\cos(\theta_{A_1})\\
+					z_{A_3} = r_{A_1}\sin(\theta_{A_1})\cos(\phi_{A_1})
+				\end{array}
+				\right.
+			\end{displaymath}
+				
+			\subsubsection{Détail du calcul de l'abscisse de $A$ dans $R_3$}
+			
+				Nous avons :
+				
+				\begin{eqnarray}
+					\nonumber x_{A_3} &=& r_{A_1} \sin(\theta_{A_1}) \sin(\phi_{A_1})\\
+					\nonumber &=& r_{A_0} \sin(\theta_{A_0} - \theta_{V_0}) \sin( \phi_{A_0} - \phi_{V_0} )
+				\end{eqnarray}
+				
+				Sachant que,
+				
+				\begin{eqnarray}
+					\nonumber \sin(\theta_{A_0} - \theta_{V_0}) &=& \sin(\theta_{A_0})\cos(\theta_{V_0}) - \cos(\theta_{A_0})\sin(\theta_{V_0})\\
+					\nonumber &=& \frac{\sqrt{r_{A_0}^2 - y_{A_0}^2}}{r_{A_0}} \cos(\theta_{V_0}) - \frac{y_{A_0}}{r_{A_0}} \sin(\theta_{V_0})\\
+					\nonumber &=& \frac{ \sqrt{x_{A_0}^2 + z_{A_0}^2} \cos(\theta_{V_0}) - y_{A_0}  \sin(\theta_{V_0}) }{r_{A_0}}
+				\end{eqnarray}
+				
+				De même que,
+				
+				\begin{eqnarray}
+					\nonumber \sin(\phi_{A_0} - \phi_{V_0}) &=& \sin(\phi_{A_0})\cos(\phi_{V_0}) - \cos(\phi_{A_0})\sin(\phi_{V_0})\\
+					\nonumber &=& \frac{x_{A_0}}{\sqrt{x_{A_0}^2 + z_{A_0}^2}} \cos(\phi_{V_0}) - \frac{z_{A_0}}{\sqrt{x_{A_0}^2 + z_{A_0}^2}} \sin(\phi_{V_0})\\
+					\nonumber &=& \frac{ x_{A_0}\cos(\phi_{V_0}) - z_{A_0}\sin(\phi_{V_0}) }{\sqrt{x_{A_0}^2 + z_{A_0}^2}}
+				\end{eqnarray}
+				
+				Nous avons donc :
+				
+				\begin{eqnarray}
+					\nonumber x_{A_3} &=& r_{A_0} \sin(\theta_{A_0} - \theta_{V_0}) \sin( \phi_{A_0} - \phi_{V_0} )\\
+					\nonumber &=& \frac{ \left( \sqrt{x_{A_0}^2 + z_{A_0}^2} \cos(\theta_{V_0}) - y_{A_0}  \sin(\theta_{V_0}) \right)\left( x_{A_0}\cos(\phi_{V_0}) - z_{A_0}\sin(\phi_{V_0}) \right)}{\sqrt{x_{A_0}^2 + z_{A_0}^2}}\\
+					\nonumber &=& \left( \cos(\theta_{V_0}) - \frac{y_{A_0}}{\sqrt{x_{A_0}^2 + z_{A_0}^2}}  \sin(\theta_{V_0}) \right) \left( x_{A_0}\cos(\phi_{V_0}) - z_{A_0}\sin(\phi_{V_0}) \right)
+				\end{eqnarray}
+				
+			\subsubsection{Détail du calcul de la profondeur de $A$ dans $R_3$}
+			
+				Nous avons :
+				
+				\begin{eqnarray}
+					\nonumber z_{A_3} &=& r_{A_1} \sin(\theta_{A_1}) \cos(\phi_{A_1})\\
+					\nonumber &=& r_{A_0} \sin(\theta_{A_0} - \theta_{V_0}) \cos( \phi_{A_0} - \phi_{V_0} )
+				\end{eqnarray}
+				
+				Sachant que :
+				
+				\begin{displaymath}
+					 \sin(\theta_{A_0} - \theta_{V_0}) = \frac{ \sqrt{x_{A_0}^2 + z_{A_0}^2} \cos(\theta_{V_0}) - y_{A_0}  \sin(\theta_{V_0}) }{r_{A_0}}
+				\end{displaymath}
+				
+				De même que :
+				
+				\begin{eqnarray}
+					\nonumber \cos(\phi_{A_0} - \phi_{V_0}) &=& \cos(\phi_{A_0})\cos(\phi_{V_0}) + \sin(\phi_{A_0})\sin(\phi_{V_0})\\
+					\nonumber &=& \frac{z_{A_0}}{\sqrt{x_{A_0}^2 + z_{A_0}^2}} \cos(\phi_{V_0}) + \frac{x_{A_0}}{\sqrt{x_{A_0}^2 + z_{A_0}^2}} \sin(\phi_{V_0})\\
+					\nonumber &=& \frac{ x_{A_0}\sin(\phi_{V_0}) + z_{A_0}\cos(\phi_{V_0}) }{\sqrt{x_{A_0}^2 + z_{A_0}^2}}
+				\end{eqnarray}
+				
+				Nous avons donc :
+				
+				\begin{eqnarray}
+					\nonumber z_{A_3} &=& r_{A_0} \sin(\theta_{A_0} - \theta_{V_0}) \cos( \phi_{A_0} - \phi_{V_0} )\\
+					\nonumber &=& \frac{ \left( \sqrt{x_{A_0}^2 + z_{A_0}^2} \cos(\theta_{V_0}) - y_{A_0}  \sin(\theta_{V_0}) \right)\left( x_{A_0}\sin(\phi_{V_0}) + z_{A_0}\cos(\phi_{V_0}) \right)}{\sqrt{x_{A_0}^2 + z_{A_0}^2}}\\
+					\nonumber &=& \left( \cos(\theta_{V_0}) - \frac{y_{A_0}}{\sqrt{x_{A_0}^2 + z_{A_0}^2}}  \sin(\theta_{V_0}) \right) \left( x_{A_0}\sin(\phi_{V_0}) + z_{A_0}\cos(\phi_{V_0}) \right)
+				\end{eqnarray}
+				
+			\subsubsection{Détail du calcul de l'ordonnée de $A$ dans $R_3$}
+			
+				Nous avons :
+				
+				\begin{eqnarray}
+					\nonumber y_{A_3} &=& r_{A_1} \cos(\theta_{A_1})\\
+					\nonumber &=& r_{A_0} \cos(\theta_{A_0} - \theta_{V_0})\\
+					\nonumber &=& r_{A_0} \left(\cos(\theta_{A_0})\cos(\theta_{V_0}) + \sin(\theta_{A_0})\sin(\theta_{V_0}) \right)\\
+					\nonumber &=& r_{A_0} \left( \frac{y_{A_0}}{r_{A_0}}\cos(\theta_{V_0}) + \frac{\sqrt{x_{A_0}^2 + z_{A_0}^2}}{r_{A_0}} \right)\\
+					\nonumber &=& y_{A_0}\cos(\theta_{V_0}) + \sqrt{x_{A_0}^2 + z_{A_0}^2}
+				\end{eqnarray}
+				
+				
+				
+		\subsection{Calcul de $A$ dans $R_4$}
+		
+			Le repère $R_4$ n'est autre que la projection du repère $R_3$ sur l'écran. Le point étant considéré comme le centre de la zone d'affichage.
+			
+			\newpage
+			
+			\begin{figure}[ht]
+				\begin{center}
+					\includegraphics[width=10cm]{images/schema_repere_r3r4.jpg}
+				\end{center}
+				\caption{Repère $R_3$ et $R_4$}
+			\end{figure}
+				
+			Nous faisons apparaître, grâce à ce nouveau repère, la notion de distance du point.
+			Nous cherchons donc ici l'image du point $A$ sur l'écran.
+			La profondeur $A_{z}$ n'intervenant dans l'affichage, nous nous concentrons ici uniquement sur les coordonnées $A_x$ et $A_y$.
+			
+			D'après la relation de thales, nous avons :
+			\begin{displaymath}
+				\frac{r_{V_0}}{A_{z_3}} = \frac{A_{x_4}}{A_{x_3}} = \frac{A_{y_4}}{A_{y_3}}
+			\end{displaymath}
+			
+			Puisque $\|O_{3}V\| = r_{V_0}$.
+			
+			Les nouvelles coordonnées du point $A$ projeté sur l'écran (dans le repère $R_4$) sont :
+			\begin{displaymath}
+				\left\{
+				\begin{array}{ll}
+					x_{A_4} = x_{A_3}\frac{r_{V_0}}{z_{A_3}}\\
+					y_{A_4} = y_{A_3}\frac{r_{V_0}}{z_{A_3}}
+				\end{array}
+				\right.
+			\end{displaymath}
+
+		\subsection{Calcul de $A$ dans $R_5$}
+
+			Les coordonnées $A_{x_5}$ et $A_{y_5}$ du point $A$ dans le repère $R_5$ nous permet d'obtenir les coordonnées du point $A$ prêtes à être afficher par le module QT.
+			Nous tenons compte ici de la hauteur $H$ et de la largeur $L$ de la zone d'affichage.
+			Nous savons donc que le point $V$ à pour coordonnées $(\frac{L}{2}, \frac{H}{2})$ dans le repère $R_5$ étant donné qu'il se situe au centre de l'écran.
+			
+			\begin{figure}[ht]
+				\begin{center}
+					\includegraphics[width=10cm]{images/schema_repere_r4r5.jpg}
+				\end{center}
+				\caption{Repère $R_4$ et $R_5$}
+			\end{figure}
+			
+			Les coordonnées $(A_{x_5}, A_{y_5}, A_{z_5})$ du point $A$ dans le repère $R_5$ sont donc :
+			\begin{displaymath}
+				\left\{
+				\begin{array}{ll}
+					x_{A_5} = x_{A_4} - \frac{L}{2}\\
+					y_{A_5} = -y_{A_4} + \frac{H}{2}
+				\end{array}
+				\right.
+			\end{displaymath}
+			
+		\subsection{Résumé : Projection sur l'écran}
+		
+			Nous partons avec les informations suivantes :
+			\begin{description}
+				\item[$A$ :] $(R_0, x_{A_0}, y_{A_0}, z_{A_0})$
+				\item[$V$ :] $(S_0, r_{V_0}, \theta_{V_0}, \phi_{V_0})$
+				\item[$L$ :] Largeur de la zone d'affichage
+				\item[$H$ :] Hauteur de la zone d'affichage
+			\end{description}
+			
+			\subsubsection{Abscisse de $A$ dans $R_3$}
+			
+				On a :
+				
+				\begin{displaymath}
+					x_{A_3} = \left( \cos(\theta_{V_0}) - \frac{y_{A_0}}{p(A)}  \sin(\theta_{V_0}) \right) \left( x_{A_0}\cos(\phi_{V_0}) - z_{A_0}\sin(\phi_{V_0}) \right)
+				\end{displaymath}
+				
+				Avec,
+				
+				\begin{displaymath}
+					\sqrt{x_{A_0}^2 + z_{A_0}^2} = p(A)
+				\end{displaymath}
+				
+			\subsubsection{Abscisse de $A$ dans $R_5$}
+			
+				On a :
+				
+				\begin{displaymath}
+					\left\{
+					\begin{array}{ll}
+						x_{A_5} = x_{A_4} - \frac{L}{2}\\
+						x_{A_4} = x_{A_3}\frac{r_{V_0}}{z_{A_3}}
+					\end{array}
+					\right.
+				\end{displaymath}
+				
+				Ce qui nous donne :
+				
+				\begin{eqnarray}
+					\nonumber x_{A_5} &=& x_{A_4} - \frac{L}{2}\\
+					\nonumber &=& x_{A_3} \frac{r_{V_0}}{z_{A_3}} - \frac{L}{2}
+				\end{eqnarray}
+
+			\subsubsection{Ordonnée de $A$ dans $R_3$}
+			
+				On a :
+				
+				\begin{displaymath}
+					y_{A_3} = y_{A_0}\cos(\theta_{V_0}) + p(A)
+				\end{displaymath}
+				
+				Avec,
+				
+				\begin{displaymath}
+					\sqrt{x_{A_0}^2 + z_{A_0}^2} = p(A)
+				\end{displaymath}
+				
+			\subsubsection{Ordonnée de $A$ dans $R_5$}
+			
+				On a :
+				
+				\begin{displaymath}
+					\left\{
+					\begin{array}{ll}
+						y_{A_5} = -y_{A_4} + \frac{H}{2}\\
+						y_{A_4} = y_{A_3}\frac{r_{V_0}}{z_{A_3}}
+					\end{array}
+					\right.
+				\end{displaymath}
+				
+				Ce qui nous donne :
+				
+				\begin{eqnarray}
+					\nonumber y_{A_5} &=& -y_{A_4} + \frac{H}{2}\\
+					\nonumber &=& -y_{A_3}\frac{r_{V_0}}{z_{A_3}} + \frac{H}{2}
+				\end{eqnarray}
+				
+			\subsubsection{Profondeur de $A$}
+				
+				Nous ne gardons que les coordonnées de la profondeur de $A$ dans le repère $R_3$ car elles nous servent dans l'algorithme du peintre.
+				
+				On a :
+				
+				\begin{eqnarray}
+					\nonumber z_{A_3} &=& \left( \cos(\theta_{V_0}) - \frac{y_{A_0}}{\sqrt{x_{A_0}^2 + z_{A_0}^2}}  \sin(\theta_{V_0}) \right) \left( x_{A_0}\sin(\phi_{V_0}) + z_{A_0}\cos(\phi_{V_0}) \right)\\
+					\nonumber &=& \left( \cos(\theta_{V_0}) - \frac{y_{A_0}}{p(A)}  \sin(\theta_{V_0}) \right) \left( x_{A_0}\sin(\phi_{V_0}) + z_{A_0}\cos(\phi_{V_0}) \right)
+				\end{eqnarray}
+				
+				Avec,
+				
+				\begin{displaymath}
+					p(A) = \sqrt{x_{A_0}^2 + z_{A_0}^2}
+				\end{displaymath}
+			
+	\section{Origine de la vue}
+	
+		\subsection{Le point V}
+		
+			 Le point $V$ désigne le point d'origine de la vue.
+			 Le vecteur $\overrightarrow{O_{0}V}$ nous donne donc deux informations sur le point de vue :
+			 \begin{itemize}
+				\item information sur l'angle de vue donné par le vecteur $\overrightarrow{O_{0}V}$ de coordonnées $(R_0, x_{v_0}, y_{v_0}, z_{v_0})$ ;
+				\item information sur la distance de l'objet (zoom) donné par le module du vecteur $\overrightarrow{O_{0}V}$ : $\sqrt{x_{v_0}^2 + y_{v_0}^2 + z_{v_0}^2}$
+			\end{itemize}
+			
+			Nous représenterons donc le vecteur $\overrightarrow{O_{0}V}$ par ses trois valeurs afin de simplifier les calculs et l'interprétation :
+			\begin{itemize}
+				\item $\theta$
+				\item $\phi$
+				\item $d$
+			\end{itemize}
+		
+		\subsection{Distance de la vue}
+		
+			Dans un soucis de visibilité, nous imposons un minimum et un maximum pour la distance entre les points $O_0$ et $V$.
+			Soit $d$ la distance entre les deux points les plus éloignés de l'objet.
+			
+			Nous avons donc :
+			\begin{displaymath}
+				2*d \leq \|O_{0}V\| \leq 5*d
+			\end{displaymath}
+		
+		\subsection{Caméra}
+		
+			La caméra se situe très exactement à l'origine de la vue. Cette origine correspond au point $V$ et la direction de la vue est définie par la droite $(O_{0}V)$.
+			Au niveau représentation, l'orgine de la vue correspond non pas à l'oeil de l'utilisateur mais au centre de la zone d'affichage de la scène 3d à l'écran.
+			
+			\begin{figure}[h]
+				\begin{center}
+					\includegraphics[width=10cm]{images/schema_origine_vue.jpg}
+				\end{center}
+				\caption{Représentation de l'origine de la vue}
+			\end{figure}
+		
+\chapter{Techniques et principes}
+
+	\section{Algorithme du peintre}
+
+		L'algorithme du peintre est un algorithme qui nous permet de définir dans quel ordre les polygones seront affichés. Ce qui permet d'écrire par dessus les surfaces et donne ainsi un semblant de cohérence et de perspective.
+		Ainsi on affiche tout d'abord les surfaces dont les barycentres sont les plus éloignés puis de plus en plus proche.
+	
+	\section{Rotation}
+	
+		La rotation de la caméra s'effectue toujours autour du centre de la scène 3d $O_0$.
+		Cela consiste donc à modifier l'angle de vue en faisant tourner le point $V$ par rapport au centre de la scène $R_0$.
+		Notre objectif est donc de modifier les angles $\theta$ et $\phi$ puis de recalculer l'abscisse et l'ordonnée du point $A$ dans le repère $R_5$ ainsi que sa profondeur dans le repère $R_3$ grâce à ces nouveaus angles.
+	
+	\section{Zoom}
+	
+		Un zoom ou un dézoom consiste à rapprocher où à éloigner la caméra de l'objet 3d.
+		En clair, il suffit juste de jouer sur le module du vecteur $\overrightarrow{O_{2}V}$, c'est à dire avec le coefficient $r_{V_0}$ du point $V$.
+
+\part{Conception logicielle}
+
+\chapter{Interface}
+
+	\section{Fenêtre principal}
+	
+		\subsection{Interface}
+	
+			\begin{figure}[h]
+				\begin{center}
+					\includegraphics[width=10cm]{images/schema_interface_global.jpg}
+				\end{center}
+				\caption{Fenêtre principal}
+			\end{figure}
+			
+			La fenêtre principale du programme se compose ainsi :
+			
+			\begin{description}
+				\item[1 :] Fenêtre QT
+				\item[2 :] Barre de titre contenant le titre de l'application
+				\item[3 :] Panneau latéral de commande
+				\item[4 :] Zone d'affichage de la scène 3d
+				\item[5 :] Objets 3d à afficher
+			\end{description}
+			
+		\subsection{Squelette}
+		
+			\begin{figure}[h]
+				\begin{center}
+					\includegraphics[width=10cm]{images/schema_interface_global_compo.jpg}
+				\end{center}
+				\caption{Squelette de la fenêtre principal}
+			\end{figure}
+			
+			\begin{figure}[h]
+				\begin{center}
+					\includegraphics[width=4cm]{images/schema_interface_global_legende.jpg}
+				\end{center}
+				\caption{Légende}
+			\end{figure}
+
+		
+	\section{Panneau latéral}
+	
+		\subsection{Interface}
+		
+			Le panneau latéral permet de faire l'interface entre l'homme et la machine. Il permet donc à l'utilisateur de :
+			
+			\begin{itemize}
+				\item charger un fichier OFF ou SFF ;
+				\item changer les paramêtre du point de vue $V$ (les angles de vue $\theta$ et $\phi$ et le module $r$) ;
+				\item de réinitialiser ces précédentes valeurs ;
+			\end{itemize}
+			
+			\begin{figure}[h]
+				\begin{center}
+					\includegraphics[width=10cm]{images/schema_interface_panneau.jpg}
+				\end{center}
+				\caption{Panneau latéral}
+			\end{figure}
+			
+			Le panneau latéral se compose donc de :
+			
+			\begin{description}
+				\item[1 :] Panneau latéral
+				\item[2 :] Bouton de chargement de fichier
+				\item[3 :] Label contenant les informations que l'utilisateur peut modifier
+				\item[4 :] Champs de texte où l'utilisateur peut rentrer les nouvelles valeurs
+				\item[5 :] Bouton validant les valeurs rentrés par l'utilisateur
+				\item[6 :] Bouton permettant de réinitialiser ces valeurs
+			\end{description}
+		
+		\subsection{Squelette}
+		
+			\begin{figure}[h]
+				\begin{center}
+					\includegraphics[width=10cm]{images/schema_interface_panneau_compo.jpg}
+				\end{center}
+				\caption{Squelette du panneau latéral}
+			\end{figure}
+			
+			\begin{figure}[h]
+				\begin{center}
+					\includegraphics[width=4cm]{images/schema_interface_panneau_legende.jpg}
+				\end{center}
+				\caption{Légende}
+			\end{figure}
+
+\chapter{Fonctionnement}
+
+	\section{Initialisation}
+	
+		\subsection{Dialogue}
+		
+			Dans un premier temps, le programme entreprend un dialogue avec l'utilisateur afin de pouvoir initialiser correctement le programme.
+			Il s'agit d'un simple menu composé de 2 éléments :
+			\begin{itemize}
+				\item charger un fichier OFF ou SFF ;
+				\item quitter le programme ;
+			\end{itemize}
+			
+			Dans la cas où l'utilisateur souhaite charger un objet 3d à partir d'un fichier, il lui sera demandé de rentrer le chemin vers le fichier.
+			
+		\subsection{Chargement du fichier}
+		
+			Nous distinguons ici deux cas distinct :
+			\begin{itemize}
+				\item l'utilisateur souhaite charger un fichier OFF ;
+				\item l'utilisateur souhaite charger un fichier SFF ;
+			\end{itemize}
+			
+			\subsubsection{Fichier OFF}
+			
+				Dans le cas d'un fichier ne contenant qu'un seul objet 3d, nous créons une instance de la classe \emph{Object\_3D} avec en paramètre le chemin vers le fichier à exploiter.
+				
+			\subsubsection{Fichier SFF}
+			
+				Dans le cas d'un fichier contenant une scène objets 3d, nous testons l'existence et la validité dudit fichier.
+				Nous créons ensuite autant d'instance de la classe \emph{Object\_3D} que d'objets 3d composant la scène avec en paramètre de chacun, le chemin vers le fichier à exploiter ainsi que les coordonnées du centre dudit objet dans le repère de la scène $R_0$.
+				
+		\subsection{Création des objets 3d}
+		
+			Lors de la création d'une instance de classe \emph{Object\_3D}, nous devons tout d'abord exploiter le fichier OFF contenant l'objet 3d afin de créer les polygones qui le compose.
+			Ensuite le calculs du barycentre de l'objet 3d nous permet de modifier les coordonnées 3d de chacun des polygones.
+			
+			\subsubsection{Vérification du fichier}
+			
+				Avant même l'exploitation du fichier, nous vérifions :
+				
+				\begin{itemize}
+					\item son existence et son accès en lecture ;
+					\item son extension en .off ;
+					\item son entête (la première ligne doit contenir le label OFF) ;
+				\end{itemize}
+				
+			\subsubsection{Premier lecture du fichier OFF}
+				
+				Nous récupérons ici les nombres \emph{int\_nb\_polygon} et \emph{int\_nb\_point} de polygones et de points 3d.
+				
+			\subsubsection{Définition des vertices}
+			
+				Ici nous créons le tableau des \emph{int\_nb\_point} point 3d.
+				Pour cela, nous lisons chacune des lignes du fichier nous renseignant sur les vertices à récupérer.
+				Zn parallèle, nous créons autant d'instances de la classe \emph{Point\_3D} avec en paramètre les coordonnées du point dans l'espace.
+			
+			\subsubsection{Définition des polygones}
+			
+				Ici nous créons la liste des \emph{int\_nb\_polygon} polygones qui composent notre objet 3d.
+				Pour cela, nous lisons chacune des lignes du fichier nous renseignant sur les polygones à récupérer.
+				Nous stockons ensuite la liste des vertices utilisés du tableau \emph{tab\_point3d} dans un tableau temporaire.
+				Nous créons en parallèle autant d'instances de la classe \emph{Polygon} avec en paramètre :
+				\begin{itemize}
+					\item la tableau temporaire contenant les instances de la classe \emph{Point\_3D} dont se compose le polygone.
+					\item L'objet de la classe QColor contenant les informations sur la couleur du polygone.
+				\end{itemize}
+					
+			\subsubsection{Centre de l'objet}
+			
+				Trouver le centre de l'objet 3d revient à calculer le barycentre de chacun des barycentres des polygones qui composent l'objet 3d.
+				Une fois que nous avons trouver ledit centre, nous modifions les coordonnées de chacun des instances \emph{Polygon} donc se compose l'objet en fonction :
+				\begin{itemize}
+					\item du barycentre de l'objet 3d ;
+					\item des coordonnées du centre de l'objet dans le repère $R_0$ ;
+				\end{itemize}
+				
+		\subsection{Création des points 3d}
+			
+			A sa création, une instance de la classe \emph{Point\_3D} se contente de stocker ses informations sur sa position dans l'espace.
+			
+		\subsection{Création des polygones}
+		
+			Lors de sa création, une instance de la classe \emph{Polygon} stocke, s'il elles sont présentes, les informations sur la couleur du polygones ainsi que le tableau de coordonnées des points qui composent le polygone.
+				
+		\subsection{Initialisation de la fenêtre}
+		
+			Une fois toutes les étapes précédentes effectués avec succès, nous allons initilisé et crée la fenêtre de rendu QT.
+			La fenêtre de rendu étant représenté par une instance de la classe \emph{Window} prenant en paramètre la liste et le nombre d'argument donné lors de l'éxécution du programme.
+			Il s'agit simplement ici de  :
+			\begin{itemize}
+				\item initialiser Qt ;
+				\item créer la fenêtre d'affichage ;
+				\item créer une fone d'affichage (instance de la classe \emph{AreaView} dans laquelle s'afficheront les objets 3d ;
+				\item créer le panneau latéral contenant les champs de texte et les boutons :
+			\end{itemize}
+			
+	\section{Affichage}
+
+		La mise à jour de l'affichage se fait par l'intermédiaire des fonctions \emph{rotation} et \emph{zoom} de la classe \emph{Scene\_3D}.
+		Ces fonctions prennent en paramêtres les angles $\theta$, $\phi$ ainsi que le coefficient de zoom $r$.
+		Il s'agit ici de stocker ces coordonnées du point de vue $V$ dans une structure \emph{struct\_point\_sphere}.
+				
+		\subsection{Projection}
+
+			\subsubsection{Projection de la scène 3d}
+			
+				Pour chacun des objets 3d, nous appelons la fonction \emph{Objet\_3D::project} qui prend en paramêtre cette structure afin de mettre à jour chacun des objets 3D.
+				L'ordre d'affichage des objets 3D est défini par l'algorithme du peintre et nous est donné grâce à la fonction de tri de la stl.
+				
+			\subsubsection{Projection d'un objet 3d}
+			
+				Avec l'algorithme du peintre, nous définissons la priorité d'affichage des polygones.
+				Puis nous appelons, pour chacun des polygones composant l'objet en question, la fonction de projection \emph{Polygon::project} de la classe \emph{Polygon}.
+				Nous ne faisons donc que transmettre la structure du point de vue $V$ en coordonnées sphérique.
+				
+			\subsubsection{Projection d'un polygone}
+			
+				Grâce aux coordonnées sphériques du point $V$, nous projectons chacun des points composant le polygone.
+				Pour ce faire, nous appelons la fonction \emph{Point\_3D::project} de chacun des points 3d.
+				
+			\subsubsection{Projection d'un point 3d}
+			
+				Grâce aux coordonnées sphériques du point 3D, nous calculons les coordonnées du point dans le repère $R_3$ puis nous remplaçons les nouvelles coordonnées par les anciennes.
+				
+		\subsection{Affichage}
+		
+			Dans un premier temps, nous effaçons la zone d'affichage.
+			Nous appelons ensuite, les fonctions :
+			\begin{itemize}
+				\item \emph{Scene\_3D::show}
+				\item \emph{Object\_3D::show}
+				\item \emph{Polygon\_3D::show}
+			\end{itemize}
+			
+\part{Architecture logicielle}
+
+\chapter{Représentation du système}
+
+	Nous disposons de cinq classes :
+	\begin{description}
+		\item[Scene\_3D : ] Classe de la scène 3d.
+		\item[Object\_3D : ] Classe des objets 3d.
+		\item[Point\_3D : ] Classe des points avec des coordonnées 3d.
+		\item[Polygon : ] Classe des polygones avec des coordonnées dans l'espace 3d.
+		\item[Window :] Classe de la fenetre dans laquelle s'afficheront les objets 3d.
+		\item[AreaView :] Classe de la zone d'affichage.
+	\end{description}
+	
+	\newpage
+
+	\begin{figure}[ht]
+		\begin{center}
+			\includegraphics[width=8cm]{images/schema_architecture_classe.jpg}
+		\end{center}
+		\caption{Architecture logicielle}
+	\end{figure}
+	
+	\newpage
+	
+	\begin{figure}[ht]
+		\includegraphics[width=8cm]{images/schema_legende_classe.jpg}
+		\caption{Légende architecture logicielle}
+	\end{figure}
+
+	Le programme principale contient une instance de la classe \emph{Scene\_3D} ainsi qu'une instance de la classe \emph{Window}.
+	A sa création, l'objet de la classe \emph{Scene\_3D} ouvre le fichier SFF contenant les $n$ objets 3d et créé donc $n$ instances de la classe \emph{Object\_3D}.
+	L'objet \emph{Scene\_3D} est crée même si la scène ne contient qu'un seul objet 3d. Dans ce cas, il ne créera qu'une seule instance de la classe \emph{Object\_3D}.
+	Chaque objet 3d est associé à un fichier OFF contenant les $m$ polygones composant cet objet. Une instance de la classe \emph{Object\_3D} crée donc $m$ instances de la classe \emph{Polygon}.
+	Chaque polygone étant représenté par $p$ points disposant de coordonnées dans l'espace, chaque objet de la classe \emph{Polygone} utilise donc $p$ instances de la classe \emph{Point\_3D}.
+	La classe \emph{Window} gère la création de la fenêtre QT ainsi que d'une instance de la classe \emph{AreaView}.
+	Une instance de la classe \emph{AreaView} correspondant à la zone d'affichage dans laquelle les objets 3d s'afficheront et contient une référence vers l'objet \emph{Scene\_3D}.
+	
+\chapter{Programme principal}
+
+	Le programme principal se compose des deux fichiers sources 3dview.cpp et 3dview.hpp.
+	Il contient essentiellement les fonctions nécéssaires au démarrage du programme. Cela va de la création des objets 3d et de la fenêtre à la gestion des menus d'interface avec l'utilisateur.
+	
+\chapter{Structure struct\_point\_sphere}
+
+	La structure \emph{struct\_point\_sphere} nous sert à décrire des points en coordonnées sphériques. Le point M a par exemple les coordonnées $(r_M, \theta_M, \phi_M)$ dans le repère sphérique.
+	
+	Elle contient essentiellement ces informations :
+	
+	\begin{description}
+		\item[double dbl\_r :] Distance entre le point $M$ et l'origine $O$ du repère.
+		\item[double dbl\_theta :] Angle formé entre l'axe $Oy$ et la droite $OM$.
+		\item[double dbl\_phi :] Angle formé entre la l'axe $Oz$ et la droite $OM$ projeté sur le plan $zOx$.
+	\end{description}
+
+\chapter{Classe Scene\_3D}
+
+	Une instance de la classe \emph{Scene\_3D} représente une scène de plusieurs objets 3d contenu dans un fichier SFF ou d'un seul objet 3d contenu dans un fichier OFF.
+
+	\section{Variables de classe}
+
+		Les variables de la classe \emph{Scene\_3D} sont :
+
+		\begin{description}
+			\item[struct\_point\_sphere origin\_view :] Coordonnées sphérique du point de vue $V$.
+			\item[vector <Objet\_3D*> vect\_objet3d :] Tableau de pointeurs vers des objets de la classe \emph{Object\_3D}.
+		\end{description}
+
+\section{Fonctions membres}
+
+	Les fonctions membres sont regroupés en 3 catégories :
+
+	\subsection{Fonctions de classe}
+
+		\subsubsection{Constructeur par paramètres}
+
+			\begin{verbatim}
+				Scene_3D::Scene_3D(string file);
+			\end{verbatim}
+			
+			Le constructeur par paramètres permet de construire la scène 3d à partir du fichier OFF ou SFF \emph{file}.
+
+		\subsubsection{Constructeur par copie}
+
+			\begin{verbatim}
+				Scene_3D::Scene_3D(const Scene_3D & );
+			\end{verbatim}
+			
+			Le constructeur par copie permet de construire une scène 3d à partir d'une autre
+
+		\subsubsection{Destructeur}
+
+			\begin{verbatim}
+				Scene_3D::~Scene_3D(void);
+			\end{verbatim}
+			
+	\subsection{Accesseurs}
+	
+		\subsubsection{Paramêtre $r$}
+
+			\begin{verbatim}
+				double Scene_3D::get_pov_r(void);
+				void Scene_3D::set_pov_r(double r);
+			\end{verbatim}
+
+		\subsubsection{Angle $\theta$}
+
+			\begin{verbatim}
+				double Scene_3D::get_pov_theta(void);
+				void Scene_3D::set_pov_theta(double theta);
+			\end{verbatim}
+
+		\subsubsection{Angle $\phi$}
+
+			\begin{verbatim}
+				double Scene_3D::get_pov_phi(void);
+				void Scene_3D::set_pov_phi(double phi);
+			\end{verbatim}
+			
+	\subsection{Fonctions d'interaction}
+
+		\subsubsection{Lecture d'un fichier}
+
+			\begin{verbatim}
+				bool Scene_3D::load_from_file(string file);
+			\end{verbatim}
+			
+			La fonction de chargement permet de charge une scène 3d à partir d'un fichier OFF ou SFF.
+			
+		\subsubsection{Test d'un fichier}
+
+			\begin{verbatim}
+				bool Scene_3D::test_file(string file);
+			\end{verbatim}
+			
+			Cette fonction de test de fichier permet de tester l'existence d'un fichier. Elle permet également de valider son format SFF.
+
+		\subsubsection{Changement de vue}
+
+			\begin{verbatim}
+				bool Scene_3D::rotate_view(double dbl_theta, double dbl_phi);
+			\end{verbatim}
+			
+			La fonction de rotation permet de modifier l'origne de la vue $V$ selon les angles $theta$, $phi$.
+			
+			\begin{verbatim}
+				bool Scene_3D::zoom(double dbl_coeff);
+			\end{verbatim}
+			
+			La fonction de zoom permet de modifier la distance de l'origine de la vue $V$ au point d'origine $O_0$ du repère $R_0$.
+
+		\subsubsection{Affichage}
+
+			\begin{verbatim}
+				bool Scene_3D::show(AreaView* area) const;
+			\end{verbatim}
+			
+			La fonction d'affichage se contente d'afficher à son tour chacun des objets 3d contenus dans la scène 3d.
+			
+\chapter{Classe Object\_3D}
+
+	Une instance de la classe \emph{Object\_3D} représente un objet 3d contenu dans un fichier OFF.
+
+	\section{Variables de classe}
+
+		Les variables de la classe \emph{Object\_3D} sont :
+
+		\begin{description}
+			\item[vector <Polygon*> vect\_polygon :] Tableau de pointeurs vers des objets de la classe \emph{Polygon}.
+			\item[vector <Point\_3D*> vect\_point3d :] Tableau à 1 dimension de pointeurs vers des objets de la classe \emph{Point\_3D}.
+			\item[Point\_3D* pt\_barycentre :] Barycentre de l'objet 3D.
+		\end{description}
+
+\section{Fonctions membres}
+
+	Les fonctions membres sont regroupés en 3 catégories :
+
+	\subsection{Fonctions de classe}
+
+		\subsubsection{Constructeur par paramètres}
+
+			\begin{verbatim}
+				Object_3D::Object_3D(string file_off);
+				Object_3D::Object_3D(string file_off, Point_3D origin);
+			\end{verbatim}
+			
+			Le constructeur par paramètres permet de construire un objet 3d en fonction du fichier OFF \emph{file\_off} et, s'il existe, de l'origine $O_2$ du repère $R_2$ dans les coordonnées du repère $R_0$.
+
+		\subsubsection{Constructeur par copie}
+
+			\begin{verbatim}
+				Object_3D::Object_3D(const Object_3D & );
+			\end{verbatim}
+			
+			La constructeur par copie permet de construire un objet 3d à partir d'un autre objet 3d.
+
+		\subsubsection{Destructeur}
+
+			\begin{verbatim}
+				Object_3D::~Object_3D(void);
+			\end{verbatim}
+			
+	\subsection{Opérateurs}
+	
+		\subsubsection{Opérateur de comparaison}
+		
+			\begin{verbatim}
+					bool Object_3D::operator<(const Object_3D & other_object) const;
+				\end{verbatim}
+				
+				La redéfinition de l'opérateur de comparaison inférieur (<) sert dans l'algorithme du peintre afin de trier et de définir l'ordre d'affichage des objets 3d.
+
+	\subsection{Accesseurs}
+
+		\subsubsection{Accesseurs tableau polygone}
+
+			\begin{verbatim}
+				Polygon* Object_3D::get_polygon(int int_n);
+			\end{verbatim}
+
+		\subsubsection{Accesseurs nombre de polygone}
+
+			\begin{verbatim}
+				int Object_3D::get_nb_polygon(void);
+			\end{verbatim}
+
+	\subsection{Fonctions d'interaction}
+
+		\subsubsection{Lecture fichiers}
+
+			\begin{verbatim}
+				bool Object_3D::load_from_file(string file);
+			\end{verbatim}
+			
+			La fonction de chargement permet de charger un objet 3d à partir d'un fichier OFF.
+			
+		\subsubsection{Test fichiers}
+
+			\begin{verbatim}
+				bool Object_3D::test_file(string file);
+			\end{verbatim}
+			
+			Cette fonction permet de tester si le fichier existe bien et s'il s'agit bien d'un fichier OFF. Notamment, grâce à l'extension.
+			
+		\subsubsection{Affichage}
+
+			\begin{verbatim}
+				bool Object_3D::show(AreaView* area);
+			\end{verbatim}
+			
+			La fonction d'affichage du polygone se contente d'afficher chacun des polygones le composant.
+			L'algorithme de sélection des surfaces (algorithme du peintre) doit être appliqué ici.
+			
+		\subsubsection{Projection à l'écran}
+
+			\begin{verbatim}
+				bool Object_3D::project(struct_point_sphere* origin_view);
+			\end{verbatim}
+			
+			Cette fonction permet de projeter l'objet 3d à l'écran en fonction de l'origine de la vue \emph{origin\_view}.
+
+		\subsubsection{Calcul du barycentre}
+
+			\begin{verbatim}
+				Point_3D* Object_3D::barycentre(void);
+			\end{verbatim}
+			
+			La fonction de calcul du barycentre se contente de renvoyer le barycentre de l'objet 3d.
+
+\chapter{Classe Point\_3D}
+
+	Une instance de la classe \emph{Point\_3D} représente un point dans l'espace.
+
+	\section{Variables de classe}
+
+		Les variables de la classe \emph{Point\_3D} sont :
+
+		\begin{description}
+			\item[double dbl\_x :] Abcisse du point.
+			\item[double dbl\_y :] Ordonnée du point.
+			\item[double dbl\_z :] Profondeur du point
+		\end{description}
+
+\section{Fonctions membres}
+
+	Les fonctions membres sont regroupés en 4 catégories :
+
+	\subsection{Fonctions de classe}
+
+		\subsubsection{Constructeur par défaut}
+
+			\begin{verbatim}
+				Point_3D::Point_3D(void);
+			\end{verbatim}
+			
+			Construit le point avec les coordonnées $(0, 0, 0)$ par défaut.
+
+		\subsubsection{Constructeur par paramètres}
+
+			\begin{verbatim}
+				Point_3D::Point_3D(double x, double y, double z);
+			\end{verbatim}
+			
+			Construit le point ayant pour coordonnées $(x, y, z)$.
+
+		\subsubsection{Constructeur par copie}
+
+			\begin{verbatim}
+				Point_3D::Point_3D(const Point_3D & other_point);
+			\end{verbatim}
+			
+			Construit un point 3d à partir d'un autre point.
+
+		\subsubsection{Destructeur}
+
+			\begin{verbatim}
+				Point_3D::~Point_3D(void);
+			\end{verbatim}
+
+	\subsection{Accesseurs}
+
+		\subsubsection{Abcisse}
+
+			\begin{verbatim}
+				double Point_3D::get_x(void);
+				void Point_3D::set_x(double x);
+			\end{verbatim}
+			
+			Les accesseurs à l'abcisse permette respectivement de récupérer et de modifier l'abcisse du point.
+
+		\subsubsection{Ordonnée}
+
+			\begin{verbatim}
+				double Point_3D::get_y(void);
+				void Point_3D::set_y(double y);
+			\end{verbatim}
+			
+			Les accesseurs à l'ordonnée permette respectivement de récupérer et de modifier l'ordonnée du point.
+
+		\subsubsection{Profondeur}
+
+			\begin{verbatim}
+				double Point_3D::get_z(void);
+				void Point_3D::set_z(double z);
+			\end{verbatim}
+			
+			Les accesseurs à la profondeur permette respectivement de récupérer et de modifier la profondeur du point.
+
+	\subsection{Fonctions d'intéraction}
+
+		\subsubsection{Projection à l'écran}
+
+			\begin{verbatim}
+				bool Point_3D::project(struct_point_sphere* origine_view) const;
+			\end{verbatim}
+			
+			Cette fonction permet de projeter un point 3d dans la zone d'affichage \emph{area} en fonction de l'origine de la vue \emph{origin\_view}.
+			Elle permet notamment de calculer les nouvelles coordonnées du point dans le repère $R_3$.
+			
+		\subsubsection{Affichage}
+
+			\begin{verbatim}
+				bool Point_3D::show(AreaView* area, struct_point_sphere* origine_view) const;
+			\end{verbatim}
+
+		\subsubsection{Calcul d'une distance}
+
+			\begin{verbatim}
+				double Point_3D::distance(const Point_3D & point_compare) const;
+			\end{verbatim}
+			
+			Cette fonction permet de calculer la distance entre deux points.
+
+\chapter{Classe Polygon}
+
+	Une instance de la classe \emph{Polygon} représente un polygone situé dans l'espace. C'est à dire un polygone avec des coordonnées 3 dimensions.
+
+	\section{Variables de classe}
+
+		Les variables de la classe \emph{Polygon} sont :
+
+		\begin{description}
+			\item[QColor polygon\_color :] Couleur du polygon.
+			\item[list <Point\_3D*> list\_vertice :] Liste des vertices (point 3d) composant le polygone.
+			\item[Point\_3D* pt\_barycentre :] Point 3d représentant le barycentre du polygone.
+		\end{description}
+
+	\section{Fonctions membres}
+
+		Les fonctions membres sont regroupés en 3 catégories :
+
+		\subsection{Fonctions de classe}
+
+			\subsubsection{Constructeur par défaut}
+
+				\begin{verbatim}
+					Polygon::Polygon(void);
+				\end{verbatim}
+				
+				Le constructeur par défaut permet de construire un polygone de base. Le polygone par défaut est un triangle.
+
+			\subsubsection{Constructeur par paramètres}
+
+				\begin{verbatim}
+					Polygon::Polygon(list <Point_3D*> list_vertice);
+					Polygon::Polygon(list <Point_3D*> list_vertice, QColor color);
+				\end{verbatim}
+				
+				Le constructeur par paramètres permet de construire un polygon à partir des ensembles de paramètres suivant :
+				\begin{itemize}
+					\item liste des vertices le composant ;
+					\item liste des vertices le composant et couleur le définissant ;
+				\end{itemize}
+
+			\subsubsection{Constructeur par copie}
+
+				\begin{verbatim}
+					Polygon::Polygon(const Polygon & other_polygon);
+				\end{verbatim}
+				
+				Le constructeur par copie permet de créer un polygone à partir d'un autre polygone.
+
+			\subsubsection{Destructeur}
+
+				\begin{verbatim}
+					Polygon::~Polygon(void);
+				\end{verbatim}
+				
+		\subsection{Opérateur}
+		
+			\subsubsection{Comparaison}
+			
+				\begin{verbatim}
+					bool Polygon::operator<(const Polygon & other_polygon) const;
+				\end{verbatim}
+				
+				La redéfinition de l'opérateur de comparaison inférieur (<) sert dans l'algorithme du peintre afin de trier et de définir l'ordre d'affichage des polygones.
+
+		\subsection{Accesseurs}
+
+			\subsubsection{Accesseurs tableau vertices}
+
+				\begin{verbatim}
+					Point_3D* Polygon::get_vertice(int int_n);
+				\end{verbatim}
+				
+				Accesseur permettant de récupérer la vertice numéro \emph{int\_n}.
+
+			\subsubsection{Accesseurs nombre de vertices}
+
+				\begin{verbatim}
+					int Polygon::get_nb_vertice(void);
+				\end{verbatim}
+				
+				Accesseur permettant de récupérer le nombre de vertice contenu dans la liste des vertices.
+
+		\subsection{Fonctions d'interaction}
+
+			\subsubsection{Affichage}
+
+				\begin{verbatim}
+					bool Polygon::show(AreaView* area);
+				\end{verbatim}
+				
+				Fonction permettant d'afficher le polygone dans la zone d'affichage \emph{area} en fonction de l'origine de la vue \emph{origin\_view}.
+				
+			\subsubsection{Projection à l'écran}
+				\begin{verbatim}
+					bool Polygon::project(struct_point_sphere* origin_view);
+				\end{verbatim}
+				
+				Fonction permettant de recalculer les nouvelles coordonnées de chacun des points composant le polygone à partir de l'origine de la vue.
+				
+			\subsubsection{Calcul du barycentre}
+
+				\begin{verbatim}
+					Point_3D* Polygon::barycentre(void);
+				\end{verbatim}
+				
+				La fonction de calcul du barycentre se contente de renvoyer le barycentre du polygone.
+
+				
+\chapter{Classe Window}
+
+	Une instance de la classe \emph{Window} représente la fenêtre dans laquelle les objets 3d seront affichés.
+	Cette classe hérite de la classe QWidget du module QT.
+
+	\section{Variables de classe}
+
+		Les variables de la classe \emph{Window} sont :
+
+		\begin{description}
+			\item[AreaView* area\_view :] La zone d'affichage sur laquelle s'afficheront les objets 3d.
+		\end{description}
+
+	\section{Fonctions membres}
+
+		Les fonctions membres sont regroupés en 3 catégories :
+
+		\subsection{Fonctions de classe}
+
+			\subsubsection{Constructeur par paramètres}
+
+				\begin{verbatim}
+					Window::Window(Scene_3D* scene);
+				\end{verbatim}
+				
+				Le constructeur a deux tâches à accomplir :
+				\begin{itemize}
+					\item initialisation de QT ;
+					\item création de la fenêtre ;
+				\end{itemize}
+				
+				Le constructeur par paramètre permet de construire la fenêtre en fonction de la scène d'objet 3D \emph{scene}.
+
+			\subsubsection{Destructeur}
+
+				\begin{verbatim}
+					Window::~Window(void);
+				\end{verbatim}
+				
+				Le destructeur sert ici pour libérer l'espace mémoire de la zone d'affichage
+
+		\subsection{Accesseurs}
+
+			\subsubsection{Accesseurs zone d'affichage}
+
+				\begin{verbatim}
+					AreaView* Window::get_areaview(void);
+				\end{verbatim}
+				
+				Cet accesseur permet de récupérer un pointeur vers la zone d'affichage.
+
+		\subsection{Fonctions d'interaction}
+
+			\subsubsection{Initialisation de Qt}
+
+				\begin{verbatim}
+					bool Window::init_qt(void);
+				\end{verbatim}
+				
+				Cette fonction permet d'initialiser le module QT.
+
+			\subsubsection{Création de la fenêtre}
+
+				\begin{verbatim}
+					bool Window::create_window(void);
+				\end{verbatim}
+				
+				Cette fonction permet de créer et d'initialiser la fenêtre QT.
+				
+\chapter{Classe AreaView}
+
+	La classe \emph{AreaView} sert à définir la zone où s'afficheront les objets en 3d dans la fenêtre. Elle hérite de la classe QWidget du module QT.
+
+	\section{Variables de classe}
+
+		Les variables de la classe \emph{AreaView} sont :
+
+		\begin{description}
+			\item[Scene\_3D* scene :] Scène d'objet 3d qui sera affiché dans la zone d'affichage.
+			\item[int int\_width :] Largeur de la zone d'affichage.
+			\item[int int\_height :] hauteur de la zone d'affichage.
+		\end{description}
+
+	\section{Fonctions membres}
+
+		Les fonctions membres sont regroupés en 3 catégories :
+
+		\subsection{Fonctions de classe}
+
+			\subsubsection{Constructeur par paramètres}
+
+				\begin{verbatim}
+					AreaView::AreaView(QWidget *parent, Scene_3D* scene3d);
+					AreaView::AreaView(QWidget *parent, Scene_3D* scene3d, int width, int height);
+				\end{verbatim}
+				
+				Le contructeur permet de contruire la zone d'affichage dépendant de la fenêtre \emph{parent} et de la scene 3d \emph{scene3d}.
+				Il peut aussi construire la zone d'affichage en fonction des dimensions \emph{width} et \emph{height} données en paramètre s'il existe.
+				
+			\subsubsection{Destructeur}
+
+				\begin{verbatim}
+					AreaView::~AreaView(void);
+				\end{verbatim}
+				
+		\subsection{Accesseurs}
+		
+			\subsubsection{Scène 3D}
+			
+				\begin{verbatim}
+					Scene_3D* AreaView::get_scene_3d() const;
+				\end{verbatim}
+				
+				Cet accesseur permet d'avoir un lien vers la scène d'objets 3d.
+		
+			\subsubsection{Dimensions}
+			
+				\begin{verbatim}
+					int AreaView::get_width(void);
+					int AreaView::get_height(void);
+				\end{verbatim}
+				
+				Ces accesseurs permettent respectivement de récupérer la hauteur et la largeur de la zone d'affichage.
+
+			\subsubsection{Taille de la zone d'affichage}
+
+				\begin{verbatim}
+					QSize AreaView::get_size() const;
+				\end{verbatim}
+				
+				Cet accesseur permet de récupérer les dimensions de la zone d'affichage au format QSize.
+
+			\subsubsection{Taille minimum de la zone d'affichage}
+
+				\begin{verbatim}
+					QSize AreaView::get_minimum_size() const;
+				\end{verbatim}
+				
+				Cet accesseur permet de récupérer les dimensions minimal de la zone d'affichage au format QSize.
+		
+		\subsection{Fonctions d'intéraction}
+		
+			\subsubsection{Affichage des objets}
+
+				\begin{verbatim}
+					void AreaView::paintEvent(QPaintEvent * event);
+				\end{verbatim}
+				
+				Cette fonction d'affichage est la fonction appelé pour dessiner le contenu de la fenêtre.
+
+\end{document}
