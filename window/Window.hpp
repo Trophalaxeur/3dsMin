@@ -19,6 +19,8 @@ class Window : public QWidget
 	private:
 		///> Zone d'affichage où s'affiche les Object_3D
 		AreaView* area_view;
+		///>Scene 3d
+		Scene_3D* scene3d;
 		
 		///> Grille pour ordonner l'affichage sur la fenètre
 		QGridLayout * mainLayout;

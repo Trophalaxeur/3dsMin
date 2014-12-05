@@ -14,6 +14,7 @@
 
 //Headers divers
 #include <math.h>
+#include <signal.h>
 
 //Headers QT
 #include <QtGui>

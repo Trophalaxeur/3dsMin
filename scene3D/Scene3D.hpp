@@ -148,7 +148,7 @@ class Scene_3D : public QWidget
 			\version 1.0
 			\return rien
 		*/
-		Scene_3D(string file);
+		Scene_3D(void);
 		
 		/*!
 			\fn void ~Scene_3D(void)

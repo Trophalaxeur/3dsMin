@@ -466,8 +466,12 @@ void Window::Window_interface_general()
 
 Window::~Window()
 {
-	//on désalloue la zone d'affichage	
- 	delete area_view;
+	cout << "Destruction de la fenetre" << endl;
+	
+	//Si la zone d'affichage n'existe pas, on détruit la scène directement
+	if(!area_view) delete scene3d;
+	//Autrement, on désalloue la zone d'affichage	
+ 	else delete area_view;
 
  	//on désalloue les boutons
  	delete bt_raz;
@@ -517,7 +521,11 @@ Window::~Window()
 }
 
 void Window::charger()
-{	
+{
+	
+	//Initialisation de la scène 3d
+	scene3d=NULL;
+	
 	//Ouverture d'une boite de dialogue permettant de choisir le fichier à charger et il retourne l'adresse en QString
 	QString fichier = QFileDialog::getOpenFileName(this, "Ouvrir un fichier", "./OFF", "Objet 3D (*.off *.sff)");
 	
@@ -529,102 +537,108 @@ void Window::charger()
 	}
     else
     {
-		//si la zone d'affichage existe (une image avez déjà été chargée avant)
-		if (area_view)
+    	//Création de la scène 3d
+		scene3d=new Scene_3D(fichier.toStdString());
+		//Si le chargement de la scène à partir du fichier s'est bien passé
+		if(scene3d->load_from_file(fichier.toStdString()))
 		{
-			//on met en place la nouvelle scene à l'aide de cette fonction que désallou comme il faut
-			area_view->set_new_scene(new Scene_3D(fichier.toStdString()));
+			//si la zone d'affichage existe (une image avez déjà été chargée avant)
+			if (area_view)
+			{
+				//on met en place la nouvelle scene à l'aide de cette fonction que désallou comme il faut
+				area_view->set_new_scene(scene3d);
+			}
+			else
+			{
+				//on efface le message de chargement
+				ch_label->close();
+				ch_image->close();
+				
+				//on affecte la nouvelle scene
+				area_view=new AreaView(this, scene3d);
+				
+				/* Les widget qui servent à modifier l'image est la lumière avaient étaient désactivé lors du l'ouverture
+				 * il faut donc maintenant les réactiver
+				 * mais cela n'est necessaire que lors du premier chargement
+				 */
+				
+				cbb_line->setDisabled(false);
+				cbb_texture->setDisabled(false);
+				
+				lab_r->setDisabled(false);
+				lab_theta->setDisabled(false);
+				lab_phi->setDisabled(false);
+					
+				lab_0_1->setDisabled(false);
+				lab_180_1->setDisabled(false);
+				lab_moins_180_1->setDisabled(false);
+					
+				lab_0_2->setDisabled(false);
+				lab_180_2->setDisabled(false);
+				lab_moins_180_2->setDisabled(false);
+					
+				bt_raz->setDisabled(false);
+					
+				sld_r->setDisabled(false);
+				sld_theta->setDisabled(false);
+				sld_phi->setDisabled(false);
+					
+				lab_r_lum->setDisabled(false);
+				lab_theta_lum->setDisabled(false);
+				lab_phi_lum->setDisabled(false);
+					
+				lab_0_1_lum->setDisabled(false);
+				lab_180_1_lum->setDisabled(false);
+				lab_moins_180_1_lum->setDisabled(false);
+					
+				lab_0_2_lum->setDisabled(false);
+				lab_180_2_lum->setDisabled(false);
+				lab_moins_180_2_lum->setDisabled(false);
+				
+				bt_raz_lum->setDisabled(false);
+					
+				sld_r_lum->setDisabled(false);
+				sld_theta_lum->setDisabled(false);
+				sld_phi_lum->setDisabled(false);
+				
+				cbb_vitesse_deplacement->setDisabled(false);
+				cbb_vitesse_deplacement->setDisabled(false);
+				cbb_vitesse_deplacement->setDisabled(false);
+				
+				lab_vitesse_zoom->setDisabled(false);
+				cbb_vitesse_zoom->setDisabled(false);
+				lab_vitesse_deplacement->setDisabled(false);
+				cbb_vitesse_deplacement->setDisabled(false);
+				
+				actionAdoucir->setDisabled(false);
+				actionPeindre->setDisabled(false);
+				actionSubdiviser->setDisabled(false);
+				actionInfoObjet->setDisabled(false);
+			}
+			
+			//on réinitialise tous les curseurs de rotation, zoom, lumière
+			sld_r->setValue(1500);
+			sld_theta->setValue(0);
+			sld_phi->setValue(0);
+			sld_r_lum->setValue(50);
+			sld_theta_lum->setValue(0);
+			sld_phi_lum->setValue(0);
+			cbb_vitesse_deplacement->setCurrentIndex(0);
+			cbb_vitesse_zoom->setCurrentIndex(0);
+			cbb_line->setCurrentIndex(0);
+			cbb_texture->setCurrentIndex(0);
+			//on affiche la zone d'affichage sur la grille
+			mainLayout->addWidget(area_view, 1,0,3,1);
+			
+			//on fait en sorte que tous les signaux du clavier soient récupérés par la zone d'affichage
+			area_view->grabKeyboard();
+			
+			//on reconnecte les signaux
+			connect_signaux_scene();
+			
+			//on actualise l'affichage de la fenètre
+			update();
 		}
-		else
-		{
-			//on efface le message de chargement
-			ch_label->close();
-			ch_image->close();
-			
-			//on affecte la nouvelle scene
-			area_view=new AreaView(this, new Scene_3D(fichier.toStdString()));
-			
-			/* Les widget qui servent à modifier l'image est la lumière avaient étaient désactivé lors du l'ouverture
-			 * il faut donc maintenant les réactiver
-			 * mais cela n'st necessaire que lors du premier chargement
-			 */
-			
-			cbb_line->setDisabled(false);
-			cbb_texture->setDisabled(false);
-			
-			lab_r->setDisabled(false);
-			lab_theta->setDisabled(false);
-			lab_phi->setDisabled(false);
-				
-			lab_0_1->setDisabled(false);
-			lab_180_1->setDisabled(false);
-			lab_moins_180_1->setDisabled(false);
-				
-			lab_0_2->setDisabled(false);
-			lab_180_2->setDisabled(false);
-			lab_moins_180_2->setDisabled(false);
-				
-			bt_raz->setDisabled(false);
-				
-			sld_r->setDisabled(false);
-			sld_theta->setDisabled(false);
-			sld_phi->setDisabled(false);
-				
-			lab_r_lum->setDisabled(false);
-			lab_theta_lum->setDisabled(false);
-			lab_phi_lum->setDisabled(false);
-				
-			lab_0_1_lum->setDisabled(false);
-			lab_180_1_lum->setDisabled(false);
-			lab_moins_180_1_lum->setDisabled(false);
-				
-			lab_0_2_lum->setDisabled(false);
-			lab_180_2_lum->setDisabled(false);
-			lab_moins_180_2_lum->setDisabled(false);
-			
-			bt_raz_lum->setDisabled(false);
-				
-			sld_r_lum->setDisabled(false);
-			sld_theta_lum->setDisabled(false);
-			sld_phi_lum->setDisabled(false);
-			
-			cbb_vitesse_deplacement->setDisabled(false);
-			cbb_vitesse_deplacement->setDisabled(false);
-			cbb_vitesse_deplacement->setDisabled(false);
-			
-			lab_vitesse_zoom->setDisabled(false);
-			cbb_vitesse_zoom->setDisabled(false);
-			lab_vitesse_deplacement->setDisabled(false);
-			cbb_vitesse_deplacement->setDisabled(false);
-			
-			actionAdoucir->setDisabled(false);
-			actionPeindre->setDisabled(false);
-			actionSubdiviser->setDisabled(false);
-			actionInfoObjet->setDisabled(false);
-		}
-		
-		//on réinitialise tous les curseurs de rotation, zoom, lumière
-		sld_r->setValue(1500);
-		sld_theta->setValue(0);
-		sld_phi->setValue(0);
-		sld_r_lum->setValue(50);
-		sld_theta_lum->setValue(0);
-		sld_phi_lum->setValue(0);
-		cbb_vitesse_deplacement->setCurrentIndex(0);
-		cbb_vitesse_zoom->setCurrentIndex(0);
-		cbb_line->setCurrentIndex(0);
-		cbb_texture->setCurrentIndex(0);
-		//on affiche la zone d'affichage sur la grille
-		mainLayout->addWidget(area_view, 1,0,3,1);
-		
-		//on fait en sorte que tous les signaux du clavier soient récupérés par la zone d'affichage
-		area_view->grabKeyboard();
-		
-		//on reconnecte les signaux
-		connect_signaux_scene();
-		
-		//on actualise l'affichage de la fenètre
-		update();
     }
 }
 

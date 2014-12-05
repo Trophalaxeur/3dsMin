@@ -17,6 +17,7 @@ AreaView::AreaView(QWidget *parent, Scene_3D* scene3D):QWidget(parent)
 
 AreaView::~AreaView(void)
 {
+	cout << "Destruction de la zone d'affichage" << endl;
 	//Destruction de la scène 3D
 	delete scene;
 }
@@ -26,9 +27,9 @@ QSize AreaView::get_minimum_size() const
 	return QSize(600, 600);
 }
 QSize AreaView::get_size() const
-    {
-        return QSize(600, 600);
-    }
+{
+	return QSize(600, 600);
+}
 
 void AreaView::paintEvent(QPaintEvent *)
 {

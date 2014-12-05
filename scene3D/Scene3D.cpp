@@ -35,24 +35,16 @@ Scene_3D::Scene_3D(const Scene_3D & other_scene) :QWidget()
 	int_mode_line=MODE_LINE_MIDDLE;
 }
 
-Scene_3D::Scene_3D(string str_file)
+Scene_3D::Scene_3D(void)
 {
 	cout << "Création de la scène 3D ..." << endl;
 	
-	//Si le chargement du fichier se passe mal
-	if(!load_from_file(str_file))
-	{
-		cout << "Chargement de la scène à partir du fichier " << str_file << " impossible." << endl;
-		//Suppression de l'instance
-		delete this;
-	}
-	//Si la liste d'objet 3d est vide, il y à eu un problème lors de la création de la scène 3d
-	if(!obj_scene)
-	{
-		cout << "La scène 3d ne contient aucun objet 3d valide" << endl;
-		//Suppression de l'instance
-		delete this;
-	}
+	//Initialisation de l'objet de la scène
+	obj_scene=NULL;
+	//Initialisation de l'origine de la vue
+	origin_view=NULL;
+	//Initialisation de l'origine de la lumière
+	origin_light=NULL;
 	
 	//Création du point d'origine de la vue
 	origin_view=new struct_point_sphere;
@@ -89,13 +81,11 @@ Scene_3D::~Scene_3D()
 	cout << "Destruction de la scène 3D" << endl;
 	
 	//Destruction de chacun de l'objet de la scène
-	delete obj_scene;
-	
+	if(obj_scene) delete obj_scene;
 	//Destruction du point de vue
-	delete origin_view;
-	
+	if(origin_view) delete origin_view;
 	//Destruction du point lumineux
-	delete origin_light;
+	if(origin_light) delete origin_light;
 }
 
 void Scene_3D::set_zoom_speed(int coef)
@@ -244,16 +234,20 @@ bool Scene_3D::load_from_file(string str_file)
 			return(false);
 		}
 		//S'il s'agit d'un off, on crée un seul objet 3d
-		obj_temp=new Object_3D(str_file);
-		//Si une erreur est survenus lors de la création de l'objet 3D
-		if(obj_temp==NULL)
+		obj_scene=new Object_3D(str_file);
+		
+		//S'il y a un problème lors de la lecture du fichier
+		if(!obj_scene->load_from_file(str_file, NULL, true))
 		{
+			cout << "Chargement du fichier " << str_file << " impossible." << endl;
+			//Suppression de l'instance
+			delete obj_scene;
 			cout << "Impossible de créer l'objet 3D" << endl;
 			//On retourne une erreur
 			return(false);
 		}
-		//Ajout de l'objet 3d
-		obj_scene=obj_temp;
+		//Déplacement de l'objet pour le centrer sur son centre de gravité
+		obj_scene->move(obj_temp->barycentre());
 		//Tout s'est bien passé
 		return(true);
 	}
@@ -268,7 +262,7 @@ bool Scene_3D::load_from_file(string str_file)
 	//Récupération du nombre d'objet à charger
 	nbre_object=atoi(str_temp.c_str());
 	
-	cout << "Chargement du fichier SFF et de ses " << nbre_object << " objets" << endl;
+	cout << "Chargement du fichier SFF et de ses " << nbre_object << " objets." << endl;
 	
 	//Initialisation de la distance moyenne des points des objets
 	dbl_temp_distance=0;
@@ -287,11 +281,16 @@ bool Scene_3D::load_from_file(string str_file)
 			pt_temp=new Point_3D(tab_flt_temp[0], tab_flt_temp[1], tab_flt_temp[2]);
 			//On crée l'objet 3d
 			obj_temp=new Object_3D(str_temp, pt_temp, tab_flt_temp[3]);
+			
 			//Si on a pas pu créer l'objet 3D
-			if(obj_temp==NULL)
+			if(!obj_temp->load_from_file(str_temp, pt_temp, false))
 			{
+				cout << "Erreur lors du chargement du fichier " << str_temp << endl;
+				cout << "Impossible de créer l'objet 3d" << endl;
 				//Suppression du point 3D
 				delete pt_temp;
+				//Destruction de l'objet
+				delete obj_temp;
 				//Fermeture du fichier
 				fichier.close();
 				//On retourne une erreur

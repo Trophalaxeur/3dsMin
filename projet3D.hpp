@@ -12,4 +12,6 @@
 #include "headers.hpp"
 #include "window/Window.hpp"
 
+Window* window;
+
 #endif

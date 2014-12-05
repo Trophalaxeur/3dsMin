@@ -44,16 +44,8 @@ Object_3D::Object_3D(string file_off)
 	//Sauvegarde du chemin du fichier
 	str_path=file_off;
 	
-	//S'il y a un problème lors de la lecture du fichier
-	if(!load_from_file(file_off, NULL, true))
-	{
-		cout << "Chargement du fichier " << file_off << " impossible." << endl;
-		//Suppression de l'instance
-		delete this;
-	}
-	
-	//Déplacement de l'objet pour le centrer sur son centre de gravité
-	move(pt_barycentre);
+	//Initialisation du barycentre
+	pt_barycentre=NULL;
 }
 
 
@@ -65,19 +57,11 @@ Object_3D::Object_3D(string file_off, Point_3D* origin, float coef)
 	//Initialisation du coefficient de grossissement
 	flt_coef=coef;
 	
+	//Initialisation du barycentre
+	pt_barycentre=NULL;
+	
 	//Sauvegarde du chemin du fichier
 	str_path=file_off;
-	
-	//S'il y a un problème lors de la lecture du fichier
-	if(!load_from_file(file_off, origin, false))
-	{
-		cout << "Chargement du fichier " << file_off << " impossible." << endl;
-		cout << "Destruction de l'objet 3D" << endl;
-		//Suppression de l'instance
-		delete this;
-	}
-	//Création du barycentre
-	barycentre();
 }
 
 
@@ -97,7 +81,7 @@ Object_3D::~Object_3D()
 	}
 	
 	//Destruction du barycentre
-	delete pt_barycentre;
+	if(pt_barycentre) delete pt_barycentre;
 }
 
 bool Object_3D::operator<(Object_3D & other_object)
@@ -213,12 +197,10 @@ bool Object_3D::load_from_file(string str_file, Point_3D* pt_origin, bool bool_a
 		//Si la ligne commence par un commentaire, toute la suite de la ligne est considéré comme étant un commentaire
 		if(str_temp.find("#")!=string::npos) getline(fichier, str_temp);
 		//Autrement
-		else
-		{
-			//On met l'entier lu dans le tableau
-			tab_int_temp[i++]=atoi(str_temp.c_str());
-		}
+		else tab_int_temp[i++]=atoi(str_temp.c_str());
 	}
+	
+	cout << i << endl;
 
 	//Récupération du nombre de sommets
 	int_vertices=tab_int_temp[0];
@@ -255,16 +237,27 @@ bool Object_3D::load_from_file(string str_file, Point_3D* pt_origin, bool bool_a
 			fichier >> str_temp;
 			//Récupération de la profondeur
 			flt_z=atof(str_temp.c_str());
-			//Lecture de la fin de lign pour passer à la suivante
+			//Lecture de la fin de ligne pour passer à la suivante
 			getline(fichier, str_temp);
-			//Création du point 3d avec les coordonnées
-			point_temp=new Point_3D(flt_x, flt_y, flt_z);
-			//Si l'origine est définie, on déplace le point
-			if(pt_origin) point_temp->move(pt_origin);
-			//Ajout de la distance
-			dbl_distance_med+=point_temp->distance(Point_3D(0,0,0));
-			//Ajout du point nouvellement créer dans le tableau de sommets
-			vect_vertice.push_back(point_temp);
+			//Test des coordonnées
+			if(!(isfinite(flt_x) && isfinite(flt_y) && isfinite(flt_z)))
+			{
+				//Message d'erreur
+				cout << "Les coordonnées du point ne sont pas valide" << endl;
+				//On remonte d'un cran
+				i--;
+			}
+			else
+			{
+				//Création du point 3d avec les coordonnées
+				point_temp=new Point_3D(flt_x, flt_y, flt_z);
+				//Si l'origine est définie, on déplace le point
+				if(pt_origin) point_temp->move(pt_origin);
+				//Ajout de la distance
+				dbl_distance_med+=point_temp->distance(Point_3D(0,0,0));
+				//Ajout du point nouvellement créer dans le tableau de sommets
+				vect_vertice.push_back(point_temp);
+			}
 		}
 	}
 	
@@ -334,88 +327,89 @@ bool Object_3D::load_from_file(string str_file, Point_3D* pt_origin, bool bool_a
 			}
 			//S'il existe, on stocke le dernier flottant
 			if(j!=int_old_space) vect_str_temp.push_back(str_temp.substr(int_old_space, j-int_old_space));
-		}
 
-		//Si on a une information sur la couleur avec transparence
-		if(vect_str_temp.size()==(unsigned int)atoi(vect_str_temp[0].c_str())+5)
-		{
-			//Pour chacun des sommets correspondant
-			for(j=0;j<((int)vect_str_temp.size()-5);j++)
+			//Si on a une information sur la couleur avec transparence
+			if(vect_str_temp.size()==(unsigned int)atoi(vect_str_temp[0].c_str())+5)
 			{
-				//On créer un point temporaire par copie de celui que l'on vas utiliser
-				point_temp=new Point_3D(*(vect_vertice[atoi(vect_str_temp[j+1].c_str())]));
-				//On inclut le sommet dans la liste de points temporaire
-				vect_pt_temp.push_back(point_temp);
+				//Pour chacun des sommets correspondant
+				for(j=0;j<((int)vect_str_temp.size()-5);j++)
+				{
+					//On créer un point temporaire par copie de celui que l'on vas utiliser
+					point_temp=new Point_3D(*(vect_vertice[atoi(vect_str_temp[j+1].c_str())]));
+					//On inclut le sommet dans la liste de points temporaire
+					vect_pt_temp.push_back(point_temp);
+				}
+				//On créer l'élément couleur
+				color_temp=new QColor((int)(atof(vect_str_temp[vect_str_temp.size()-4].c_str())*255), (int)(atof(vect_str_temp[vect_str_temp.size()-3].c_str())*255), (int)(atof(vect_str_temp[vect_str_temp.size()-2].c_str())*255),(int)(atof(vect_str_temp[vect_str_temp.size()-1].c_str())*255));
+				//Création du polygone
+				polygon_temp=new Polygon(vect_pt_temp, color_temp);
 			}
-			//On créer l'élément couleur
-			color_temp=new QColor((int)(atof(vect_str_temp[vect_str_temp.size()-4].c_str())*255), (int)(atof(vect_str_temp[vect_str_temp.size()-3].c_str())*255), (int)(atof(vect_str_temp[vect_str_temp.size()-2].c_str())*255),(int)(atof(vect_str_temp[vect_str_temp.size()-1].c_str())*255));
-			//Création du polygone
-			polygon_temp=new Polygon(vect_pt_temp, color_temp);
-		}
-		//Si on a une information sur la couleur sans transparence
-		else if(vect_str_temp.size()==(unsigned int)atoi(vect_str_temp[0].c_str())+4)
-		{
-			//Pour chacun des sommets correspondant
-			for(j=0;j<((int)vect_str_temp.size()-4);j++)
+			//Si on a une information sur la couleur sans transparence
+			else if(vect_str_temp.size()==(unsigned int)atoi(vect_str_temp[0].c_str())+4)
 			{
-				//On créer un point temporaire par copie de celui que l'on vas utiliser
-				point_temp=new Point_3D(*(vect_vertice[atoi(vect_str_temp[j+1].c_str())]));
-				//On inclut le sommet dans la liste de points temporaire
-				vect_pt_temp.push_back(point_temp);
+				//Pour chacun des sommets correspondant
+				for(j=0;j<((int)vect_str_temp.size()-4);j++)
+				{
+					//On créer un point temporaire par copie de celui que l'on vas utiliser
+					point_temp=new Point_3D(*(vect_vertice[atoi(vect_str_temp[j+1].c_str())]));
+					//On inclut le sommet dans la liste de points temporaire
+					vect_pt_temp.push_back(point_temp);
+				}
+				//On créer l'élément couleur
+				color_temp=new QColor((int)(atof(vect_str_temp[vect_str_temp.size()-3].c_str())*255), (int)(atof(vect_str_temp[vect_str_temp.size()-2].c_str())*255), (int)(atof(vect_str_temp[vect_str_temp.size()-1].c_str())*255));
+				//Création du polygone
+				polygon_temp=new Polygon(vect_pt_temp, color_temp);
 			}
-			//On créer l'élément couleur
-			color_temp=new QColor((int)(atof(vect_str_temp[vect_str_temp.size()-3].c_str())*255), (int)(atof(vect_str_temp[vect_str_temp.size()-2].c_str())*255), (int)(atof(vect_str_temp[vect_str_temp.size()-1].c_str())*255));
-			//Création du polygone
-			polygon_temp=new Polygon(vect_pt_temp, color_temp);
-		}
-		//Autrement, s'il n'y a pas d'information sur la couleur
-		else if(vect_str_temp.size()==(unsigned int)atoi(vect_str_temp[0].c_str())+1)
-		{
-			//Pour chacun des sommets correspondant
-			for(j=0;j<((int)vect_str_temp.size()-1);j++)
+			//Autrement, s'il n'y a pas d'information sur la couleur
+			else if(vect_str_temp.size()==(unsigned int)atoi(vect_str_temp[0].c_str())+1)
 			{
-				//On créer un point temporaire par copie de celui que l'on vas utiliser
-				point_temp=new Point_3D(*(vect_vertice[atoi(vect_str_temp[j+1].c_str())]));
-				//On inclut le sommet requis dans la liste des points temporaire
-				vect_pt_temp.push_back(point_temp);
+				//Pour chacun des sommets correspondant
+				for(j=0;j<((int)vect_str_temp.size()-1);j++)
+				{
+					//On créer un point temporaire par copie de celui que l'on vas utiliser
+					point_temp=new Point_3D(*(vect_vertice[atoi(vect_str_temp[j+1].c_str())]));
+					//On inclut le sommet requis dans la liste des points temporaire
+					vect_pt_temp.push_back(point_temp);
+				}
+				//Création du polygone
+				polygon_temp=new Polygon(vect_pt_temp);
 			}
-			//Création du polygone
-			polygon_temp=new Polygon(vect_pt_temp);
-		}
-		//Autrement, il n'y a pas assez d'information
-		else
-		{	
-			//On vide le vecteur de chaine temporaire
-			vect_str_temp.clear();
+			//Autrement, il n'y a pas assez d'information
+			else
+			{	
+				//On vide le vecteur de chaine temporaire
+				vect_str_temp.clear();
+				
+				//Vidage du vecteur de point temporaire
+				vect_pt_temp.clear();
+				
+				//Fermeture du fichier
+				fichier.close();
+				
+				//Suppression de la liste des points
+				for(j=0;j<(int)vect_vertice.size();j++) delete vect_vertice[j];
+				
+				//Message d'erreur
+				cout << "Erreur sur le structure du fichier OFF... Abandon de la lecture du fichier OFF." << endl;
+				
+				//On retourne une erreur
+				return(false);
+			}
+			
+			dbl_sum_x+=polygon_temp->barycentre()->get_x();
+			dbl_sum_y+=polygon_temp->barycentre()->get_y();
+			dbl_sum_z+=polygon_temp->barycentre()->get_z();
+			
+			//On ajoute le polygone à la liste des polygones
+			list_polygon.push_back(polygon_temp);
 			
 			//Vidage du vecteur de point temporaire
 			vect_pt_temp.clear();
 			
-			//Fermeture du fichier
-			fichier.close();
-			
-			//Suppression de la liste des points
-			for(j=0;j<(int)vect_vertice.size();j++) delete vect_vertice[j];
-			
-			//Message d'erreur
-			cout << "Erreur sur le structure du fichier OFF... Abandon de la lecture du fichier OFF." << endl;
-			
-			//On retourne une erreur
-			return(false);
+			//On vide le vecteur temporaire
+			vect_str_temp.clear();
+		
 		}
-		
-		dbl_sum_x+=polygon_temp->barycentre()->get_x();
-		dbl_sum_y+=polygon_temp->barycentre()->get_y();
-		dbl_sum_z+=polygon_temp->barycentre()->get_z();
-		
-		//On ajoute le polygone à la liste des polygones
-		list_polygon.push_back(polygon_temp);
-		
-		//Vidage du vecteur de point temporaire
-		vect_pt_temp.clear();
-		
-		//On vide le vecteur temporaire
-		vect_str_temp.clear();
 	}
 
 	//Fermeture du fichier
