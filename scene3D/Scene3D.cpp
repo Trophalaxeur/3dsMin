@@ -247,7 +247,7 @@ bool Scene_3D::load_from_file(string str_file)
 			return(false);
 		}
 		//Déplacement de l'objet pour le centrer sur son centre de gravité
-		obj_scene->move(obj_temp->barycentre());
+		obj_scene->move(obj_scene->barycentre());
 		//Tout s'est bien passé
 		return(true);
 	}
