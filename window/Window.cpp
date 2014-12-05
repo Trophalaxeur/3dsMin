@@ -538,7 +538,7 @@ void Window::charger()
     else
     {
     	//Création de la scène 3d
-		scene3d=new Scene_3D(fichier.toStdString());
+		scene3d=new Scene_3D();
 		//Si le chargement de la scène à partir du fichier s'est bien passé
 		if(scene3d->load_from_file(fichier.toStdString()))
 		{
