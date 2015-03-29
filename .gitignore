@@ -1,0 +1,6 @@
+3dsMin
+*.pro
+*.o
+Makefile
+moc_*
+qrc_basicdrawing*
